@@ -826,6 +826,46 @@ h4 {
   margin-bottom: var(--space-4);
 }
 
+.event-card-poster img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.event-card.has-poster {
+  display: grid;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.event-card-cal-label {
+  font-weight: 700;
+  color: var(--color-navy);
+  margin: var(--space-6) 0 var(--space-2);
+}
+
+.event-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* One event: give it the full width, poster beside the details */
+.events-single {
+  display: block;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+@media (min-width: 800px) {
+  .events-single .event-card.has-poster {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    padding: var(--space-8);
+    gap: var(--space-8);
+  }
+}
+
 .events-empty {
   text-align: center;
   padding: var(--space-16) var(--space-4);

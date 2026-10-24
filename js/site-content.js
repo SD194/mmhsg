@@ -22,9 +22,29 @@ window.SITE_CONTENT = {
   },
 
   // An empty array shows the "Nothing scheduled yet" state.
-  // Shape: { id, title, startsAt (ISO 8601, +05:30), location, isOnline,
-  //          category, description, link? }
+  // Shape: { id, title, startsAt (ISO 8601, +05:30), endsAt? (defaults to +2h),
+  //          location, isOnline, category, description,
+  //          link?, poster? (e.g. 'images/my-poster.jpeg'), posterAlt? }
+  // Every event automatically gets "Add to calendar" buttons.
+  // Events disappear from the site once they have ended.
   events: [
+    {
+      id: 'first-meetup-2026-10-25',
+      title: 'Come meet the community',
+      startsAt: '2026-10-25T16:00:00+05:30',
+      endsAt: '2026-10-25T18:00:00+05:30', // assumed 2 hours: change if needed
+      location: 'KMC Greens, Manipal',
+      isOnline: false,
+      category: 'meetup',
+      description:
+        'Our first community meetup, for anyone with ADHD or who thinks a little differently. ' +
+        'A relaxed, informal gathering. No pressure to speak or participate beyond what feels comfortable. ' +
+        'If it rains we move to KMC Food Court, confirmed in the WhatsApp community on the day.',
+      poster: 'images/meetup-poster.jpeg',
+      posterAlt:
+        'Poster for the first MMHSG community meetup. Come meet the community. For anyone with ADHD or who thinks a little differently. ' +
+        'Sunday 25 October, 4:00 PM, KMC Greens (KMC Food Court if it rains, confirmed on the day).',
+    },
     // {
     //   id: 'example-001',
     //   title: 'Community meetup',

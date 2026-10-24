@@ -147,18 +147,91 @@
     return typeof url === 'string' && /^https?:\/\//i.test(url);
   }
 
+  function isSafeImage(url) {
+    return typeof url === 'string' && /^(https?:\/\/|images\/)/i.test(url);
+  }
+
+  var DEFAULT_DURATION_MS = 2 * 60 * 60 * 1000;
+
+  function endOf(evt) {
+    var start = new Date(evt.startsAt);
+    var end = evt.endsAt ? new Date(evt.endsAt) : null;
+    return end && !isNaN(end.getTime()) ? end : new Date(start.getTime() + DEFAULT_DURATION_MS);
+  }
+
+  // Events that have not finished yet, soonest first
+  function getUpcomingEvents() {
+    var now = new Date();
+    return (Array.isArray(content.events) ? content.events : [])
+      .filter(function (evt) {
+        var start = new Date(evt && evt.startsAt);
+        return evt && evt.title && !isNaN(start.getTime()) && endOf(evt) >= now;
+      })
+      .sort(function (a, b) { return new Date(a.startsAt) - new Date(b.startsAt); });
+  }
+
+  // ---- Add to calendar ----
+  function calStamp(date) {
+    return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  }
+
+  function calDescription(evt) {
+    return evt.description || '';
+  }
+
+  function googleCalendarUrl(evt) {
+    var start = new Date(evt.startsAt);
+    return 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+      '&text=' + encodeURIComponent((brand.abbr ? brand.abbr + ': ' : '') + evt.title) +
+      '&dates=' + calStamp(start) + '/' + calStamp(endOf(evt)) +
+      '&details=' + encodeURIComponent(calDescription(evt)) +
+      '&location=' + encodeURIComponent(evt.isOnline ? 'Online' : (evt.location || ''));
+  }
+
+  function icsEscape(text) {
+    return String(text).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  }
+
+  function downloadIcs(evt) {
+    var start = new Date(evt.startsAt);
+    var lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//MMHSG//Events//EN',
+      'CALSCALE:GREGORIAN',
+      'BEGIN:VEVENT',
+      'UID:' + (evt.id || calStamp(start)) + '@mmhsg',
+      'DTSTAMP:' + calStamp(new Date()),
+      'DTSTART:' + calStamp(start),
+      'DTEND:' + calStamp(endOf(evt)),
+      'SUMMARY:' + icsEscape((brand.abbr ? brand.abbr + ': ' : '') + evt.title),
+      'DESCRIPTION:' + icsEscape(calDescription(evt)),
+      'LOCATION:' + icsEscape(evt.isOnline ? 'Online' : (evt.location || '')),
+      'BEGIN:VALARM',
+      'TRIGGER:-PT1H',
+      'ACTION:DISPLAY',
+      'DESCRIPTION:Starting in 1 hour',
+      'END:VALARM',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ];
+    var blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (evt.id || 'event') + '.ics';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
   function renderEvents() {
     var list = document.getElementById('events-list');
     var empty = document.getElementById('events-empty');
     if (!list || !empty) return;
 
-    var now = new Date();
-    var upcoming = (Array.isArray(content.events) ? content.events : [])
-      .filter(function (evt) {
-        var start = new Date(evt && evt.startsAt);
-        return evt && evt.title && !isNaN(start.getTime()) && start >= now;
-      })
-      .sort(function (a, b) { return new Date(a.startsAt) - new Date(b.startsAt); });
+    var upcoming = getUpcomingEvents();
 
     if (!upcoming.length) {
       empty.hidden = false;
@@ -169,11 +242,25 @@
     empty.hidden = true;
     list.hidden = false;
     list.textContent = '';
+    list.classList.toggle('events-single', upcoming.length === 1);
 
     upcoming.forEach(function (evt) {
       var card = el('article', 'event-card reveal');
-      card.appendChild(el('span', 'event-card-category', evt.category || 'event'));
-      card.appendChild(el('h3', '', evt.title));
+
+      if (isSafeImage(evt.poster)) {
+        var posterWrap = el('div', 'event-card-poster');
+        var img = document.createElement('img');
+        img.src = evt.poster;
+        img.alt = evt.posterAlt || '';
+        img.loading = 'lazy';
+        posterWrap.appendChild(img);
+        card.appendChild(posterWrap);
+        card.classList.add('has-poster');
+      }
+
+      var body = el('div', 'event-card-body');
+      body.appendChild(el('span', 'event-card-category', evt.category || 'event'));
+      body.appendChild(el('h3', '', evt.title));
 
       var meta = el('div', 'event-card-meta');
       var when = el('span');
@@ -184,21 +271,46 @@
       where.appendChild(document.createTextNode(evt.isOnline ? 'Online' : (evt.location || 'To be announced')));
       meta.appendChild(when);
       meta.appendChild(where);
-      card.appendChild(meta);
+      body.appendChild(meta);
 
-      if (evt.description) card.appendChild(el('p', '', evt.description));
+      if (evt.description) body.appendChild(el('p', '', evt.description));
 
       if (isSafeUrl(evt.link)) {
         var a = el('a', 'btn btn-primary', 'Join this event');
         a.href = evt.link;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
-        card.appendChild(a);
+        body.appendChild(a);
       }
+
+      body.appendChild(el('p', 'event-card-cal-label', 'Add to your calendar'));
+      var actions = el('div', 'event-card-actions');
+      var g = el('a', 'btn btn-secondary', 'Google Calendar');
+      g.href = googleCalendarUrl(evt);
+      g.target = '_blank';
+      g.rel = 'noopener noreferrer';
+      var ics = el('button', 'btn btn-secondary', 'Apple / Outlook (.ics)');
+      ics.type = 'button';
+      ics.addEventListener('click', function () { downloadIcs(evt); });
+      actions.appendChild(g);
+      actions.appendChild(ics);
+      body.appendChild(actions);
+
+      card.appendChild(body);
       list.appendChild(card);
     });
 
     observeReveals(list.querySelectorAll('.reveal'));
+  }
+
+  // ---- Homepage teaser: show the next event instead of "Nothing scheduled yet" ----
+  function renderEventsTeaser() {
+    var text = document.getElementById('events-teaser-text');
+    if (!text) return;
+    var next = getUpcomingEvents()[0];
+    if (!next) return;
+    text.textContent = 'Next up: ' + next.title + ', ' + formatDate(next.startsAt) +
+      (next.isOnline ? ', online' : (next.location ? ', ' + next.location : '')) + '.';
   }
 
   // ---- Footer year ----
@@ -212,6 +324,7 @@
   setupHeader();
   setupMenu();
   renderEvents();
+  renderEventsTeaser();
   setYear();
   observeReveals(document.querySelectorAll('.reveal:not(.event-card)'));
 })();
